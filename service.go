@@ -4,7 +4,11 @@ package catalogue
 // catalogue service. Everything here is agnostic to the transport (HTTP).
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"time"
 
@@ -98,9 +102,31 @@ func (s *catalogueService) List(tags []string, order string, pageNum, pageSize i
 		s.logger.Log("database error", err)
 		return []Sock{}, ErrDBConnection
 	}
-	for i, s := range socks {
-		socks[i].ImageURL = []string{s.ImageURL_1, s.ImageURL_2}
-		socks[i].Tags = strings.Split(s.TagString, ",")
+
+	type Temperature struct {
+		Temp int `json:"temp"`
+	}
+
+	resp, err := http.Get("http://iot-handler:3001/temperature") //http://10.161.2.161:3001/temperature
+	if err != nil {
+		return []Sock{}, err
+	}
+
+	body, readErr := ioutil.ReadAll(resp.Body)
+	if readErr != nil {
+		return []Sock{}, readErr
+	}
+	fmt.Println(string(body))
+	var data Temperature
+	json.Unmarshal(body, &data)
+
+	for i, so := range socks {
+		socks[i].ImageURL = []string{so.ImageURL_1, so.ImageURL_2}
+		socks[i].Tags = strings.Split(so.TagString, ",")
+		//socks[i].Price = float32(data.Temp)
+		if data.Temp >= 10 {
+			socks[i].Price += 10.0
+		}
 	}
 
 	// DEMO: Change 0 to 850
@@ -108,7 +134,7 @@ func (s *catalogueService) List(tags []string, order string, pageNum, pageSize i
 
 	socks = cut(socks, pageNum, pageSize)
 
-	return socks, nil
+	return socks, nil //errors.New(string(body) + string(data.Temp))
 }
 
 func (s *catalogueService) Count(tags []string) (int, error) {
